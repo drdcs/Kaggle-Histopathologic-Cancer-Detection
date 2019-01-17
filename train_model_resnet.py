@@ -1,4 +1,8 @@
 import os
+import tensorflow as tf
+from sklearn.metrics import precision_recall_curve
+from keras.layers.core import Reshape
+from keras import backend as K
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
@@ -6,14 +10,15 @@ from keras.preprocessing.image import ImageDataGenerator
 
 from keras.applications.resnet50 import ResNet50
 from keras.models import Model
-from keras.layers import Dense, Flatten, Dropout, Activation, BatchNormalization, GlobalAveragePooling2D, GlobalMaxPooling2D, Concatenate, Input
+from keras.activations import relu, sigmoid
+from keras.layers import Dense, Flatten, add, Conv2D, MaxPooling2D, AveragePooling2D, Dropout, Activation, BatchNormalization, GlobalAveragePooling2D, GlobalMaxPooling2D, Concatenate, Input, ZeroPadding2D
 from keras.optimizers import Adam
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, TensorBoard, ModelCheckpoint
 from keras.utils.vis_utils import plot_model
 
 plt.switch_backend('agg')
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '2,3,4'
+os.environ["CUDA_VISIBLE_DEVICES"] = '3,4,5,6,7'
 
 train_dir = './dataset/train/'
 # test_dir = './dataset/test/'
@@ -75,33 +80,81 @@ def load_data():
     return train_generator, valid_generator
 
 
+def Conv2d_BN(x, nb_filter, kernel_size, strides=(1, 1), padding='same', name=None):
+    if name is not None:
+        bn_name = name + '_bn'
+        conv_name = name + '_conv'
+    else:
+        bn_name = None
+        conv_name = None
+
+    x = Conv2D(nb_filter, kernel_size, padding=padding,
+               strides=strides, activation='relu', name=conv_name)(x)
+    x = BatchNormalization(axis=3, name=bn_name)(x)
+    return x
+
+
+def bottleneck_Block(inpt, nb_filters, strides=(1, 1), with_conv_shortcut=False):
+    k1, k2, k3 = nb_filters
+    x = Conv2d_BN(inpt, nb_filter=k1, kernel_size=1,
+                  strides=strides, padding='same')
+    x = Conv2d_BN(x, nb_filter=k2, kernel_size=3, padding='same')
+    x = Conv2d_BN(x, nb_filter=k3, kernel_size=1, padding='same')
+    if with_conv_shortcut:
+        shortcut = Conv2d_BN(inpt, nb_filter=k3,
+                             strides=strides, kernel_size=1)
+        x = add([x, shortcut])
+        return x
+    else:
+        x = add([x, inpt])
+        return x
+
+
+def resnet_50():
+    inpt = Input(IN_SHAPE)
+    x = ZeroPadding2D((3, 3))(inpt)
+    x = Conv2d_BN(x, nb_filter=64, kernel_size=(
+        7, 7), strides=(2, 2), padding='valid')
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), padding='same')(x)
+
+    # conv2_x
+    x = bottleneck_Block(x, nb_filters=[64, 64, 256], strides=(
+        1, 1), with_conv_shortcut=True)
+    x = bottleneck_Block(x, nb_filters=[64, 64, 256])
+    # x = bottleneck_Block(x, nb_filters=[64, 64, 256])
+
+    # conv3_x
+    x = bottleneck_Block(x, nb_filters=[128, 128, 512], strides=(
+        2, 2), with_conv_shortcut=True)
+    x = bottleneck_Block(x, nb_filters=[128, 128, 512])
+    x = bottleneck_Block(x, nb_filters=[128, 128, 512])
+    # x = bottleneck_Block(x, nb_filters=[128, 128, 512])
+
+    # conv4_x
+    x = bottleneck_Block(x, nb_filters=[256, 256, 1024], strides=(
+        2, 2), with_conv_shortcut=True)
+    x = bottleneck_Block(x, nb_filters=[256, 256, 1024])
+    x = bottleneck_Block(x, nb_filters=[256, 256, 1024])
+    x = bottleneck_Block(x, nb_filters=[256, 256, 1024])
+    # x = bottleneck_Block(x, nb_filters=[256, 256, 1024])
+    # x = bottleneck_Block(x, nb_filters=[256, 256, 1024])
+
+    # conv5_x
+    x = bottleneck_Block(x, nb_filters=[512, 512, 2048], strides=(
+        2, 2), with_conv_shortcut=True)
+    x = bottleneck_Block(x, nb_filters=[512, 512, 2048])
+    # x = bottleneck_Block(x, nb_filters=[512, 512, 2048])
+
+    x = AveragePooling2D(pool_size=(2, 2))(x)
+    x = Flatten()(x)
+    x = Dense(1, activation='softmax')(x)
+    model = Model(inputs=inpt, outputs=x)
+    return model
+
+
 def model_bulid():
-    inputs = Input(IN_SHAPE)
-    conv_base = ResNet50(
-        weights='imagenet',
-        include_top=False,
-        input_shape=IN_SHAPE
-    )
-    x = conv_base(inputs)
-    out = Flatten()(x)
-    out = Dense(512)(out)
-    out = BatchNormalization()(out)
-    out = Activation(activation='relu')(out)
-    out = Dropout(dropout_rate)(out)
-    out = Dense(1, activation="sigmoid", name="3_")(out)
-    model = Model(inputs, out)
-
-    conv_base.Trainable = True
-    set_trainable = False
-    for layer in conv_base.layers:
-        if layer.name == 'res5a_branch2a':
-            set_trainable = True
-        if set_trainable:
-            layer.trainable = True
-        else:
-            layer.trainable = False
-
-    model.compile(Adam(0.01),
+    model = resnet_50()
+    model.compile(Adam(0.001),
                   loss="binary_crossentropy", metrics=["accuracy"])
 
     model.summary()
@@ -136,7 +189,7 @@ def train_model():
     history = model.fit_generator(train_generator, steps_per_epoch=STEP_SIZE_TRAIN,
                                   validation_data=valid_generator,
                                   validation_steps=STEP_SIZE_VALID,
-                                  epochs=15,
+                                  epochs=35,
                                   callbacks=[reducel, earlystopper, model_checkpoint, tensorboard])
 
     plt.plot(history.history['loss'], label='train')

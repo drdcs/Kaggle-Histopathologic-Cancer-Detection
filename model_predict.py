@@ -6,12 +6,14 @@ import numpy as np
 import pandas as pd
 from skimage.io import imread
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '2,3,4'
+os.environ["CUDA_VISIBLE_DEVICES"] = '4'
 
 if __name__ == '__main__':
 
     base_test_dir = './dataset/test/'
     model = load_model('weights.h5')
+    # model = load_model('weights_nasnet.h5')
+    # model = load_model('weights_boost.h5')
     print(model.summary())
 
     test_files = glob(os.path.join(base_test_dir, '*.tif'))

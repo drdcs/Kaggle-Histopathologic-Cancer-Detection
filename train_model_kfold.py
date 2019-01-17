@@ -89,7 +89,7 @@ def model_bulid():
         else:
             layer.trainable = False
 
-    model.compile(Adam(0.001),
+    model.compile(Adam(0.01),
                   loss="binary_crossentropy", metrics=["accuracy"])
 
     model.summary()
