@@ -1,3 +1,10 @@
+'''
+@Description: 
+@Author: HuangQinJian
+@Date: 2018-12-16 18:15:59
+@LastEditTime: 2019-01-18 20:54:25
+@LastEditors: HuangQinJian
+'''
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -10,12 +17,13 @@ from keras.applications.nasnet import NASNetMobile
 from keras.models import Model
 from keras.layers import Dense, Flatten, Dropout, Activation, BatchNormalization, GlobalAveragePooling2D, GlobalMaxPooling2D, Concatenate, Input
 from keras.optimizers import Adam
+from sklearn.metrics import roc_curve, auc, roc_auc_score
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, TensorBoard, ModelCheckpoint
 from keras.utils.vis_utils import plot_model
 
 plt.switch_backend('agg')
 
-os.environ["CUDA_VISIBLE_DEVICES"] = '4'
+os.environ["CUDA_VISIBLE_DEVICES"] = '2,3,4,5'
 
 train_dir = './dataset/train/'
 # test_dir = './dataset/test/'
@@ -129,7 +137,7 @@ def train_model():
     history = model.fit_generator(train_generator, steps_per_epoch=STEP_SIZE_TRAIN,
                                   validation_data=valid_generator,
                                   validation_steps=STEP_SIZE_VALID,
-                                  epochs=30,
+                                  epochs=50,
                                   callbacks=[reducel, earlystopper, model_checkpoint, tensorboard])
 
     plt.plot(history.history['loss'], label='train')
@@ -147,6 +155,22 @@ def train_model():
     plt.xlabel("epoch")
     plt.legend(["train", "valid"], loc="upper left")
     plt.savefig('acc_performance_boost.png')
+
+    # ROC validation plot
+    predictions = model.predict_generator(
+        valid_generator, steps=len(valid_generator), verbose=1)
+    false_positive_rate, true_positive_rate, threshold = roc_curve(
+        valid_generator.classes, predictions)
+    area_under_curve = auc(false_positive_rate, true_positive_rate)
+    plt.clf()
+    plt.plot([0, 1], [0, 1], 'k--')
+    plt.plot(false_positive_rate, true_positive_rate,
+             label='AUC = {:.3f}'.format(area_under_curve))
+    plt.xlabel('False positive rate')
+    plt.ylabel('True positive rate')
+    plt.title('ROC curve')
+    plt.legend(loc='best')
+    plt.savefig('roc_validation.png', bbox_inches='tight')
 
 
 if __name__ == '__main__':
