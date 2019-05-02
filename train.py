@@ -1,12 +1,3 @@
-#!/usr/bin/env python
-# coding=UTF-8
-'''
-@Description: 
-@Author: HuangQinJian
-@LastEditors: HuangQinJian
-@Date: 2019-04-02 16:29:35
-@LastEditTime: 2019-04-02 16:33:00
-'''
 
 import gc
 import os
